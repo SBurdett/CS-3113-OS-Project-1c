@@ -46,15 +46,18 @@ command line. The shell has many features including:
         echo - repeats the line of input
         quit - quit from the program with a zero return value
 
-external commands -  all other command line inputs are executed via a fork and exec
+        external commands -  all other command line inputs are executed via a fork and exec
 
-input redirection - when a command line includes '<' input redirection immediately begins after the first command.
+input redirection - 
+
+        when a command line includes '<' input redirection immediately begins after the first command.
                     '<' must be delimited by white space in the command line and then followed by desired input <fileName>
-output redirection - when a command line includes '>' output redirection is turned on in the child process where the exec command prints out the output to the designated file.
-                    '>' must be delimited by white space in the command line and then followed by desired output <fileName>.
-                    Output file is created if it doesnt exist and truncated if it does.
-output redirection appending - '>>'  must be delimited by white space in the command line and then followed by desired output <fileName>.
-                                Output file is created if it doesnt exist and appended too if it does.
+output redirection - 
+
+        when a command line includes '>' output redirection is turned on in the child process where the exec command prints out the output to the designated file. '>' must be delimited by white space in the command line and then followed by desired output <fileName>. Output file is created if it doesnt exist and truncated if it does.
+output redirection appending - 
+                
+       '>>'  must be delimited by white space in the command line and then followed by desired output <fileName>. Output file is created if it doesnt exist and appended too if it does.
 
 
 3. Bugs
