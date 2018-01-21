@@ -36,17 +36,17 @@ command line. The shell has many features including:
 
 2. Commands
 
-cd - change the current directory and update the envvironment
-clr - clear the screen
-dir - list the current directory contente (ls -al)
-dir <directory> - list the given directory contents (ls -al <directory>)
-environ - list all the environment strings
-help - display help manual
-pause - stops the command line and continues when ENTER is pressed
-echo - repeats the line of input
-quit - quit from the program with a zero return value
+        cd - change the current directory and update the envvironment
+        clr - clear the screen
+        dir - list the current directory contente (ls -al)
+        dir <directory> - list the given directory contents (ls -al <directory>)
+        environ - list all the environment strings
+        help - display help manual
+        pause - stops the command line and continues when ENTER is pressed
+        echo - repeats the line of input
+        quit - quit from the program with a zero return value
 
-external commands - all other command line inputs are executed via a fork and exec
+external commands -  all other command line inputs are executed via a fork and exec
 
 input redirection - when a command line includes '<' input redirection immediately begins after the first command.
                     '<' must be delimited by white space in the command line and then followed by desired input <fileName>
@@ -63,15 +63,13 @@ output redirection appending - '>>'  must be delimited by white space in the com
 
 
 4. a) What happens when Ctrl-C is pressed during
-        I. Command execution?
-
+        I. Command execution? 
+        
         Executuion stops immeditely and the shell is exited.
-
-        II. User entry of commands?
-
+II. User entry of commands?
+        
         The shell is exited immediately.
-
-        III. Would SIGINT trapping control this better?
+III. Would SIGINT trapping control this better?
 
         While more code would be necessary to control the signal this would give more control and security to the user. If the shell was using
         any memory in the heap controlling interrupt signal would allow the shel to clean up any object before exiting. Also if the user
