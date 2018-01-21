@@ -1,0 +1,424 @@
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <sys/types.h>
+
+
+#define MAX_BUFFER 1024 // max line buffer
+#define MAX_ARGS 64 // max # args
+#define SEPARATORS " \t\n" // token sparators
+#define README "readme"
+extern char **environ; //Environment array
+
+int main (int argc, char ** argv)
+{
+        char buf[MAX_BUFFER]; // line buffer
+        char * args[MAX_ARGS]; // pointers to arg strings
+        char ** arg; // working pointer thru args
+        char * prompt ; // shell prompt
+        char ** env; // Variable used for the environ command
+
+        int status;// Status of the child process
+        char * tempArgs[MAX_ARGS]; // A temporary array of arguments, used in exec commands
+        pid_t pid; // Process id, used for forking
+        size_t size = 100; //
+        
+        int inputFile; // Boolean used to indicate theres a command for "<" in the prompt
+        int outputFile; // Boolean used to indicate there a command for ">" in the prompt
+        int outputFileAppend; // Boolean used to indicate theres a command for ">>" in the prompt
+
+        int dont_wait;
+        int dont_waitLocation;
+
+        int inputFileLocation; // Location of "<" in args
+        int outputFileLocation; // Location of ">" or ">>" in args
+
+        int batchFile;  // Boolean that turns off the prompt in case of a batch file
+
+        if(argv[1]) // If a batch file is specified
+        {
+                if(access(argv[1], F_OK) == 0) // If the file exits
+                {
+                        if(access(argv[1], R_OK) == 0) // If the file has read permission
+                        {       
+                                batchFile = 1;
+                                freopen(argv[1], "r", stdin); // Change input to the specified file             
+                        }
+                        else
+                        {
+                                printf("File was not readable");
+                        }
+                }
+                else
+                {
+                        printf("File not found\n");
+                }
+        }
+
+        char readMePath[MAX_BUFFER];// readme pathname
+
+        /*Set the readme pathname from the starting directory*/
+        if(!getcwd(readMePath, sizeof(readMePath))) 
+        {  
+                _exit(127);
+        }
+        strcat(readMePath,"/" README);      // make full readme pathname
+
+        /* keep reading input until "quit" command or eof of redirected input */
+        while (!feof(stdin))
+        {
+                /* get command line from input */
+        
+                if(!batchFile) // If there isn't a batch file print the prompt
+                {
+                        prompt = getcwd(buf,size);
+                        strcat(prompt, "$ ");
+                        fputs (prompt, stdout); // write prompt
+                }
+
+
+                //Set and reset tempArgs and file booleans
+
+                for(int i = 0; tempArgs[i]; i++)
+                {
+                        tempArgs[i] = NULL;
+                }
+
+                inputFile = 0;
+                outputFile = 0;
+                outputFileAppend = 0;
+                dont_wait = 0;
+
+                if (fgets (buf, MAX_BUFFER, stdin )) // Read a line
+                {
+                        /* tokenize the input into args array */
+                        arg = args;
+                        *arg++ = strtok(buf,SEPARATORS); // tokenize input
+                        while ((*arg++ = strtok(NULL,SEPARATORS)));
+                        // last entry will be NULL      
+                        if (args[0]) // If there's anything there                                                                                                                                                                                                                                 
+                        {
+                                for(int i = 0; args[i]; i++) // Parse through input to determine if I/O redirection is necessary
+                                {
+                                        if(strcmp(args[i],"<") == 0)// Input Redirection
+                                        {
+                                                if(access(args[i + 1], F_OK) == 0) // If the file exits
+                                                {
+                                                        if(access(args[i + 1], R_OK) == 0) // If the file has read permission
+                                                        {
+                                                                inputFile = 1;
+                                                                inputFileLocation = i + 1;
+                                                        }
+                                                        else
+                                                        {
+                                                                printf("Designated input file was not readable\n");
+                                                        }
+                                                }
+                                                else
+                                                {
+                                                        printf("Designated input file was not found\n");
+                                                }
+                                        }
+
+                                        if(strcmp(args[i],">") == 0)// Output redirection truncating
+                                        {
+                                                outputFile = 1;
+                                                outputFileLocation = i + 1;
+                                        }
+
+                                        if(strcmp(args[i],">>") == 0) // OutPut redirection appending
+                                        {
+                                                outputFileAppend = 1;
+                                                outputFileLocation = i + 1;
+                                        }
+
+                                        if(strcmp(args[i],"&") == 0) // User wants to not wait for child process
+                                        {
+                                                dont_wait = 1;
+                                                dont_waitLocation = i;
+                                        }
+                                }
+
+
+
+                                /* check for internal/external command */
+                                if (!strcmp(args[0],"clr")) // "clear" command
+                                {
+                                        tempArgs[0] = "clear";
+
+                                        switch(pid = fork())
+                                        {
+                                                case -1:
+                                                _exit(127);
+
+                                                case 0:
+                                                        if(inputFile)
+                                                        {
+                                                                freopen(args[inputFileLocation], "r", stdin);
+                                                        }
+
+
+                                                        execvp(tempArgs[0], tempArgs);
+                                                        _exit(127);
+                                                default:
+                                                        if(!dont_wait)
+                                                                waitpid(pid, &status, WUNTRACED);
+                                        }
+                                        continue;
+                                }
+                                else if(!strcmp(args[0], "cd")) // "cd" command
+                                {
+                                        if(args[1] && strcmp(args[1],"<")!= 0 && strcmp(args[1],">")!= 0 &&  strcmp(args[1],">>")!= 0) // If a specific directory is named
+                                        {
+                                                char *newDir = args[1];
+                                                setenv("PWD" ,newDir, 1);
+                                                chdir(newDir);
+
+                                                if(inputFile)
+                                                {
+                                                        freopen(args[inputFileLocation], "r", stdin);
+                                                }
+                                        }
+
+                                }
+                                else if (!strcmp(args[0],"quit")) // "quit" command
+                                        break; // break out of 'while' loop
+                                else if (!strcmp(args[0], "environ")) //"environ" command
+                                {
+                                        tempArgs[0] = "env";
+
+                                        switch(pid = fork())
+                                        {
+                                                case -1:
+                                                        _exit(127);
+                                                case 0:
+                                                        if(inputFile)
+                                                        {
+                                                                freopen(args[inputFileLocation], "r", stdin);
+                                                        }
+                                                        if(outputFile)
+                                                        {
+                                                                freopen(args[outputFileLocation], "w", stdout);
+                                                        }
+                                                        if(outputFileAppend)
+                                                        {
+                                                                freopen(args[outputFileLocation], "a", stdout);
+                                                        }
+
+                                                        execvp(tempArgs[0], tempArgs);
+
+                                                default:
+                                                        if(!dont_wait)
+                                                                waitpid(pid, &status, WUNTRACED);
+                                        }
+
+                                        continue;
+                                }
+                                else if(!strcmp(args[0],"dir")) //"dir" command for directories
+                                {
+                                        if (args[1]&& strcmp(args[1],"<")!= 0 && strcmp(args[1],">")!= 0 &&  strcmp(args[1],">>")!= 0 && strcmp(args[1],"&")!= 0 ) // If a specific directory is called
+                                        {
+                                                tempArgs[0] = "ls";
+                                                tempArgs[1] = "-al";
+                                                tempArgs[2] = args[1];
+
+                                                switch(pid = fork())
+                                                {
+                                                        case -1:
+                                                         _exit(127);
+                                                        case 0:
+                                                                if(inputFile)
+                                                                {
+                                                                        freopen(args[inputFileLocation], "r", stdin);
+                                                                }
+                                                                if(outputFile)
+                                                                {
+                                                                        freopen(args[outputFileLocation], "w", stdout);
+                                                                }
+                                                                if(outputFileAppend)
+                                                                {
+                                                                        freopen(args[outputFileLocation], "a", stdout);
+                                                                }
+
+                                                                execvp(tempArgs[0], tempArgs);
+                                                                _exit(127);
+                                                        default:
+                                                                if(!dont_wait)
+                                                                        waitpid(pid, &status, WUNTRACED);
+                                                }
+                                        }
+                                        else // Gives the current directory
+                                        {
+                                                tempArgs[0] = "ls";
+                                                tempArgs[1] = "-al";
+
+                                                switch(pid = fork())
+                                                {
+                                                        case -1:
+                                                                _exit(127);
+
+                                                        case 0:
+                                                                if(inputFile)
+                                                                {
+                                                                        freopen(args[inputFileLocation], "r", stdin);
+                                                                }
+                                                                if(outputFile)
+                                                                {
+                                                                        freopen(args[outputFileLocation], "w", stdout);
+                                                                }
+                                                                if(outputFileAppend)
+                                                                {
+                                                                        freopen(args[outputFileLocation], "a", stdout);
+                                                                }
+
+                                                                execvp(tempArgs[0], tempArgs);
+                                                                _exit(127);
+
+                                                        default:
+                                                                if(!dont_wait)
+                                                                        waitpid(pid, &status, WUNTRACED);
+
+                                                }
+                                        }
+
+                                }
+
+                                else if(!strcmp(args[0],"echo")) //"echo" command
+                                {
+                                        for(int i = 1; args[i] != NULL; i++)
+                                        {
+                                                printf("%s ", args[i]);
+                                        }
+
+                                        printf("\n");
+                                }
+
+                                else if(!strcmp(args[0],"pause")) // "pause" command
+                                {
+                                        int ch;
+
+                                        printf("Press enter to continue...\n");
+                                        system("stty -echo");
+                                        while(1)
+                                         {
+                                                ch = getchar();
+                                                if(ch == '\n')
+                                                {
+                                                        break;
+                                                }
+
+                                        }
+
+                                        system("stty echo");
+
+                                }
+
+                                else if(!strcmp(args[0],"help")) // "help" command, prints the readme
+                                {
+                                        tempArgs[0] = "more";
+                                        tempArgs[1] = readMePath;
+                                        tempArgs[2] = NULL;
+
+                                        switch(pid = fork())
+                                        {
+                                                case -1:
+                                                        _exit(127);
+                                                case 0:
+                                                        if(inputFile)
+                                                        {
+                                                                freopen(args[inputFileLocation], "r", stdin);
+                                                        }
+                                                        if(outputFile)
+                                                        {
+                                                                freopen(args[outputFileLocation], "w", stdout);
+                                                        }
+                                                        if(outputFileAppend)
+                                                        {
+                                                                freopen(args[outputFileLocation], "a", stdout);
+                                                        }
+
+                                                        execvp(tempArgs[0], tempArgs);
+
+                                                default:
+                                                      if(!dont_wait)
+                                                              waitpid(pid, &status, WUNTRACED);
+                                        }
+
+                                }
+                                /* else pass command onto OS */
+
+                                else
+                                {
+                                        // Next if and else if statements set the arguments to be exec to the correct ones when there are I/O redirection symbols present
+                                        if(inputFile)
+                                        {
+                                                tempArgs[0] = args[inputFileLocation];
+                                                for(int i = inputFileLocation - 1; args[i]; i++)
+                                                {
+                                                        args[i] = NULL;
+                                                }
+                                        }
+                                        else if(outputFile)
+                                        {
+                                                tempArgs[0] = args[outputFileLocation];
+                                                for(int i = outputFileLocation - 1; args[i]; i++)
+                                                {
+                                                        args[i] = NULL;
+                                                }
+                                                 }
+                                        else if(outputFileAppend)
+                                        {
+                                                tempArgs[0] = args[outputFileLocation];
+                                                for(int i = outputFileLocation - 1; args[i]; i++)
+                                                {
+                                                        args[i] = NULL;
+                                                }
+                                        }
+                                        else
+                                        {
+                                                /*Do nothing, continue on to switch   */
+                                        }
+
+                                        if(dont_wait)
+                                        {
+                                                args[dont_waitLocation] = NULL;
+                                        }
+
+
+                                        switch(pid = fork())
+                                        {
+                                                case -1:
+                                                        _exit(127);
+
+                                                case 0:
+                                                        if(inputFile)
+                                                        {
+                                                                freopen(tempArgs[0], "r", stdin);
+                                                        }
+                                                        if(outputFile)
+                                                        {
+                                                                freopen(tempArgs[0], "w", stdout);
+                                                        }
+                                                        if(outputFileAppend)
+                                                        {
+                                                                freopen(tempArgs[0], "a", stdout);
+                                                        }
+
+                                                        execvp(args[0], args);
+                                                        _exit(127);
+
+                                                default:
+                                                        if(!dont_wait)
+                                                                waitpid(pid, &status, WUNTRACED);
+                                        }
+
+                                }
+                        }
+                }
+        }
+
+
+        return 0;
+}
